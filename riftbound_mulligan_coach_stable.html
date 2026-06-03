@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Riftbound Mulligan Coach</title>
+<style>
+:root{--panel:#12192a;--panel2:#0d1322;--text:#f7f7fb;--muted:#9ca3af;--border:#293249;--accent:#7c3aed;--good:#22c55e;--bad:#ef4444;--warn:#f59e0b}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:radial-gradient(circle at top,#1d2440,#080b14 50%,#050712);color:var(--text)}
+.wrap{max-width:1050px;margin:0 auto;padding:14px}
+header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}
+h1{font-size:25px;margin:0} h2{margin:0 0 12px;font-size:20px}
+p{color:#dbe1ef;line-height:1.45}.small{color:var(--muted);font-size:13px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.full{grid-column:1/-1}
+.panel{background:rgba(18,25,42,.94);border:1px solid var(--border);border-radius:18px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:block;margin:0 0 6px;color:var(--muted);font-size:13px}
+select,textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:13px;padding:12px;font-size:15px}
+textarea{min-height:170px;resize:vertical}
+button{border:0;border-radius:13px;padding:12px 14px;color:white;font-weight:800;background:var(--accent);font-size:15px;cursor:pointer}
+button.secondary{background:#26314f}button.good{background:var(--good)}button.bad{background:var(--bad)}button.warn{background:var(--warn);color:#171717}
+.buttons{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.hand{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.card{min-height:112px;padding:12px;border-radius:15px;border:1px solid var(--border);background:linear-gradient(180deg,#212a49,#111827)}
+.card.selected{outline:3px solid var(--warn);border-color:var(--warn)}
+.card b{display:block;margin-bottom:8px}
+.tag{display:inline-block;color:#d6def4;border:1px solid var(--border);border-radius:999px;padding:3px 8px;font-size:12px}
+.checkline{margin-top:10px;display:flex;align-items:center;gap:8px;color:#fff;font-weight:800}
+.checkline input{width:24px;height:24px;accent-color:#f59e0b}
+.score{font-size:50px;font-weight:950;margin:6px 0}.keep{color:var(--good)}.mull{color:var(--bad)}
+.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat div{background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:12px}.stat b{font-size:22px}
+table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--border);padding:10px;text-align:left;vertical-align:top}th{color:var(--muted);font-size:13px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.tab{background:#202944}.hidden{display:none}
+.badge{display:inline-block;padding:4px 9px;border-radius:999px;background:#202944;border:1px solid var(--border);color:#dbeafe;font-size:12px;margin:3px 3px 0 0}
+@media(max-width:780px){.grid,.row{grid-template-columns:1fr}header{display:block}.stat{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<div><h1>Riftbound Mulligan Coach</h1><p class="small">Irelia — mulligan massimo 2 carte con checkbox.</p></div>
+<button class="secondary" id="resetBtn">Reset</button>
+</header>
+
+<div class="grid">
+<section class="panel">
+<h2>Allenamento</h2>
+<div class="row">
+<div><label>Matchup</label><select id="matchup"></select></div>
+<div><label>Chi inizia?</label><select id="playdraw"><option value="play">Inizio io</option><option value="draw">Inizia l'avversario</option></select></div>
+</div>
+<div class="row" style="margin-top:10px">
+<div><label>Dimensione mano</label><select id="handSize"><option>4</option><option selected>5</option><option>6</option><option>7</option></select></div>
+<div><label>Modalità</label><select id="mode"><option value="quiz">Quiz</option><option value="coach">Coach subito</option></select></div>
+</div>
+<div class="buttons">
+<button id="generateBtn">Genera mano</button>
+<button class="secondary" id="showDeckBtn">Lista</button>
+<button class="secondary" id="showSideBtn">Side</button>
+</div>
+</section>
+
+<section class="panel">
+<h2>Statistiche</h2>
+<div class="stat">
+<div><span class="small">Mani</span><br><b id="stHands">0</b></div>
+<div><span class="small">Corrette</span><br><b id="stRight">0</b></div>
+<div><span class="small">Errori</span><br><b id="stWrong">0</b></div>
+<div><span class="small">Acc.</span><br><b id="stAcc">0%</b></div>
+</div>
+</section>
+
+<section class="panel full">
+<h2>Mano generata</h2>
+<div id="hand" class="hand"><p class="small">Premi “Genera mano”.</p></div>
+
+<div class="panel" style="margin-top:14px;background:#0d1322">
+<h2>Mulligan reale</h2>
+<p class="small">Spunta massimo 2 carte da rimulligare. Le altre restano.</p>
+<p class="small" id="mulliganInfo">Carte selezionate: 0/2</p>
+<div class="buttons">
+<button class="secondary" id="clearMullBtn">Deseleziona</button>
+<button class="warn" id="mulliganBtn">Rimulliga selezionate</button>
+</div>
+</div>
+
+<div class="buttons">
+<button class="good" id="keepBtn">KEEP</button>
+<button class="bad" id="mullBtn">MULLIGAN</button>
+<button class="warn" id="coachBtn">Consiglio app</button>
+</div>
+</section>
+
+<section class="panel full hidden" id="result">
+<h2 id="verdict"></h2>
+<div class="score" id="score"></div>
+<div id="reason"></div>
+</section>
+
+<section class="panel full">
+<div class="tabs">
+<button class="tab" id="guideTabBtn">Guida matchup</button>
+<button class="tab" id="deckTabBtn">Lista</button>
+<button class="tab" id="sideTabBtn">Side</button>
+<button class="tab" id="historyTabBtn">Storico</button>
+</div>
+<div id="guideTab"></div>
+<div id="deckTab" class="hidden">
+<h2>Lista principale</h2>
+<textarea id="deckText"></textarea>
+<div class="buttons"><button id="saveDeckBtn">Salva lista</button><button class="secondary" id="restoreDeckBtn">Ripristina lista base</button></div>
+</div>
+<div id="sideTab" class="hidden">
+<h2>Sideboard</h2>
+<textarea id="sideText"></textarea>
+<div class="buttons"><button id="saveSideBtn">Salva sideboard</button></div>
+</div>
+<div id="historyTab" class="hidden">
+<h2>Storico mani</h2>
+<div id="history"></div>
+</div>
+</section>
+</div>
+</div>
+
+<script>
+(function(){
+var DEFAULT_DECK = "1 Irelia, Blade Dancer\n1 Irelia, Fervent\n3 Defy\n3 Discipline\n3 Defiant Dance\n2 Charm\n2 En Garde\n2 Ride the Wind\n2 Stacked Deck\n2 Not So Fast\n1 Star-Crossed\n2 Gust\n3 Tideturner\n3 Stellacorn Herder\n3 Scuttle Crab\n1 Fizz, Trickster\n1 Vex, Apathetic\n3 Guardian Angel\n3 Boots of Swiftness";
+var DEFAULT_SIDE = "1 Gust\n2 Adaptatron\n1 Zhonya's Hourglass\n1 Disarming Rake\n2 Star-Crossed\n1 Angler Beast";
+
+var CARD_TYPES = {
+"Irelia, Blade Dancer":"Champion","Irelia, Fervent":"Champion","Scuttle Crab":"Early","Tideturner":"Early","Stellacorn Herder":"Early",
+"Boots of Swiftness":"Tempo","Defy":"Interaction","Discipline":"Interaction","Defiant Dance":"Tempo","Charm":"Interaction","En Garde":"Finisher",
+"Ride the Wind":"Tempo","Stacked Deck":"Value","Not So Fast":"Interaction","Star-Crossed":"Interaction","Gust":"Interaction","Fizz, Trickster":"Value",
+"Vex, Apathetic":"Tech","Guardian Angel":"Protection"
+};
+
+var MATCHUPS = {
+"Generico / blind":{plan:"Cerca almeno un early play e una carta tempo/interazione.",seek:["Scuttle Crab","Tideturner","Stellacorn Herder","Boots of Swiftness","Defy","Discipline","Defiant Dance"],avoid:["Guardian Angel","En Garde","Stacked Deck"],sideIn:[],sideOut:[]},
+"Aggro / Jinx / Draven":{plan:"Contro aggro devi impattare subito: early play, Defy/Discipline/Charm e Not So Fast.",seek:["Scuttle Crab","Tideturner","Stellacorn Herder","Defy","Discipline","Not So Fast","Charm","Gust"],avoid:["Stacked Deck","En Garde","Guardian Angel","Ride the Wind"],sideIn:["Gust","Adaptatron","Disarming Rake","Angler Beast"],sideOut:["Stacked Deck","En Garde","Ride the Wind","Guardian Angel"]},
+"Control / Viktor / Lux":{plan:"Contro control puoi tenere mani più lente, ma devono avere pressione o value.",seek:["Irelia, Fervent","Irelia, Blade Dancer","Boots of Swiftness","Defiant Dance","Stacked Deck","En Garde","Fizz, Trickster"],avoid:["Charm","Not So Fast"],sideIn:["Star-Crossed","Zhonya's Hourglass","Adaptatron"],sideOut:["Charm","Not So Fast","Gust"]},
+"Midrange / Garen / Darius":{plan:"Contro midrange vuoi curva e carte che vincono scambi.",seek:["Scuttle Crab","Tideturner","Stellacorn Herder","Defy","Defiant Dance","Guardian Angel","Boots of Swiftness"],avoid:["Stacked Deck","En Garde"],sideIn:["Star-Crossed","Zhonya's Hourglass","Angler Beast"],sideOut:["Stacked Deck","Charm","Ride the Wind"]},
+"Tempo / Ahri / LeBlanc":{plan:"Contro tempo non devi perdere iniziativa.",seek:["Scuttle Crab","Tideturner","Boots of Swiftness","Defy","Discipline","Gust","Defiant Dance"],avoid:["Guardian Angel","En Garde","Stacked Deck"],sideIn:["Gust","Disarming Rake","Adaptatron"],sideOut:["Stacked Deck","En Garde","Guardian Angel"]},
+"Combo / Azir / Yasuo":{plan:"Contro combo serve pressione + disruption.",seek:["Scuttle Crab","Tideturner","Boots of Swiftness","Defiant Dance","Defy","Not So Fast","Irelia, Fervent","Gust"],avoid:["Guardian Angel","Stacked Deck","Charm"],sideIn:["Star-Crossed","Gust","Disarming Rake"],sideOut:["Guardian Angel","Stacked Deck","Charm"]},
+"Mirror Irelia":{plan:"Nel mirror contano tempo e board.",seek:["Scuttle Crab","Tideturner","Boots of Swiftness","Defiant Dance","Defy","Stellacorn Herder","Discipline"],avoid:["Stacked Deck","En Garde"],sideIn:["Gust","Zhonya's Hourglass","Star-Crossed"],sideOut:["Stacked Deck","En Garde","Charm"]}
+};
+
+var currentHand = [];
+var remainingDeck = [];
+var selectedMulligan = [];
+var hasMulliganed = false;
+var stats = JSON.parse(localStorage.getItem("rift_stats_stable") || '{"hands":0,"right":0,"wrong":0}');
+var hist = JSON.parse(localStorage.getItem("rift_history_stable") || "[]");
+
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];}); }
+
+function parseDeck(text){
+  var deck = [];
+  text.split("\n").map(function(x){return x.trim();}).filter(Boolean).forEach(function(line){
+    var m = line.match(/^(\d+)\s+(.+)$/);
+    var n = m ? parseInt(m[1],10) : 1;
+    var name = m ? m[2].trim() : line;
+    for(var i=0;i<n;i++) deck.push(name);
+  });
+  return deck;
+}
+function typeOf(card){ return CARD_TYPES[card] || "Carta"; }
+
+function generateHand(){
+  var fullDeck = parseDeck(el("deckText").value);
+  currentHand = [];
+  remainingDeck = fullDeck.slice();
+  var n = parseInt(el("handSize").value,10);
+  for(var i=0;i<n && remainingDeck.length;i++){
+    var idx = Math.floor(Math.random()*remainingDeck.length);
+    currentHand.push(remainingDeck.splice(idx,1)[0]);
+  }
+  selectedMulligan = [];
+  hasMulliganed = false;
+  renderHand();
+  el("result").classList.add("hidden");
+  if(el("mode").value === "coach") coach();
+}
+
+function renderHand(){
+  var html = "";
+  for(var i=0;i<currentHand.length;i++){
+    var c = currentHand[i];
+    var checked = selectedMulligan.indexOf(i) >= 0;
+    html += '<div class="card '+(checked?'selected':'')+'">';
+    html += '<b>'+esc(c)+'</b><span class="tag">'+esc(typeOf(c))+'</span>';
+    html += '<label class="checkline"><input type="checkbox" class="mullCheck" data-index="'+i+'" '+(checked?'checked':'')+' '+(hasMulliganed?'disabled':'')+'> Mulliga questa</label>';
+    html += '</div>';
+  }
+  if(!html) html = '<p class="small">Premi “Genera mano”.</p>';
+  el("hand").innerHTML = html;
+  var checks = document.querySelectorAll(".mullCheck");
+  for(var j=0;j<checks.length;j++){
+    checks[j].addEventListener("change", function(){
+      var index = parseInt(this.getAttribute("data-index"),10);
+      if(this.checked){
+        if(selectedMulligan.length >= 2){
+          this.checked = false;
+          alert("Puoi rimulligare massimo 2 carte.");
+          return;
+        }
+        if(selectedMulligan.indexOf(index) < 0) selectedMulligan.push(index);
+      } else {
+        selectedMulligan = selectedMulligan.filter(function(x){return x !== index;});
+      }
+      renderHand();
+    });
+  }
+  updateMulliganInfo();
+}
+
+function updateMulliganInfo(){ el("mulliganInfo").textContent = "Carte selezionate: " + selectedMulligan.length + "/2"; }
+
+function clearMulliganSelection(){
+  if(hasMulliganed) return;
+  selectedMulligan = [];
+  renderHand();
+}
+
+function performMulligan(){
+  if(!currentHand.length){ alert("Prima genera una mano."); return; }
+  if(hasMulliganed){ alert("Hai già fatto il mulligan per questa mano."); return; }
+  if(selectedMulligan.length === 0){ alert("Seleziona 1 o 2 carte da rimulligare."); return; }
+  for(var a=0;a<selectedMulligan.length;a++){
+    var i = selectedMulligan[a];
+    if(remainingDeck.length === 0) continue;
+    var idx = Math.floor(Math.random()*remainingDeck.length);
+    currentHand[i] = remainingDeck.splice(idx,1)[0];
+  }
+  hasMulliganed = true;
+  selectedMulligan = [];
+  renderHand();
+  el("result").classList.add("hidden");
+  alert("Mulligan effettuato.");
+}
+
+function evaluate(){
+  if(!currentHand.length) generateHand();
+  var m = MATCHUPS[el("matchup").value];
+  var score = 32, hits = [], misses = [], notes = [];
+  var earlyCards = ["Scuttle Crab","Tideturner","Stellacorn Herder"];
+  var interactions = ["Defy","Discipline","Charm","Not So Fast","Gust","Star-Crossed"];
+  var tempo = ["Boots of Swiftness","Defiant Dance","Ride the Wind"];
+  var value = ["Stacked Deck","Fizz, Trickster","Irelia, Fervent","Irelia, Blade Dancer"];
+  function countIn(arr){ return currentHand.filter(function(c){return arr.indexOf(c)>=0;}).length; }
+  var earlyCount = countIn(earlyCards), interactionCount = countIn(interactions), tempoCount = countIn(tempo), valueCount = countIn(value);
+  var protectionCount = currentHand.filter(function(c){return c==="Guardian Angel";}).length;
+  if(earlyCount===0){score-=22;notes.push("Nessun early play: mano lenta.");}
+  if(earlyCount===1){score+=15;notes.push("Un early play presente.");}
+  if(earlyCount>=2){score+=23;notes.push("Ottima base early.");}
+  score += interactionCount*7 + tempoCount*8 + valueCount*4;
+  if(protectionCount>=2){score-=13;notes.push("Troppe Guardian Angel in apertura.");}
+  currentHand.forEach(function(c){
+    if(m.seek.indexOf(c)>=0){score+=8;hits.push(c);}
+    if(m.avoid.indexOf(c)>=0){score-=8;misses.push(c);}
+  });
+  if(currentHand.indexOf("Boots of Swiftness")>=0 && earlyCount>=1){score+=11;notes.push("Boots + early play è molto forte.");}
+  if(currentHand.indexOf("Tideturner")>=0 && currentHand.indexOf("Defiant Dance")>=0){score+=8;notes.push("Tideturner + Defiant Dance dà un buon piano tempo.");}
+  if(el("playdraw").value==="draw" && el("matchup").value.indexOf("Aggro")>=0 && earlyCount===0){score-=18;notes.push("On draw contro aggro senza early play è quasi sempre mulligan.");}
+  if(earlyCount===0 && interactionCount===0){score-=18;notes.push("Non hai né board né interazione.");}
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return {score:score, decision:score>=65?"keep":"mulligan", hits:hits, misses:misses, notes:notes, plan:m.plan, sideIn:m.sideIn, sideOut:m.sideOut};
+}
+
+function showEval(prefix){
+  var e = evaluate();
+  el("result").classList.remove("hidden");
+  el("verdict").innerHTML = (prefix||"") + (e.decision==="keep" ? '<span class="keep">KEEP consigliato</span>' : '<span class="mull">MULLIGAN consigliato</span>');
+  el("score").textContent = e.score + "/100";
+  el("reason").innerHTML = "<p>"+esc(e.plan)+"</p>"
+    + "<p><b>Carte prioritarie trovate:</b> "+esc(e.hits.length ? e.hits.join(", ") : "nessuna.")+"</p>"
+    + "<p><b>Carte penalizzate:</b> "+esc(e.misses.length ? e.misses.join(", ") : "nessuna.")+"</p>"
+    + "<p><b>Note:</b> "+esc(e.notes.length ? e.notes.join(" ") : "Nessuna nota critica.")+"</p>"
+    + "<p><b>Side IN:</b> "+esc(e.sideIn.length ? e.sideIn.join(", ") : "nessuna.")+"<br><b>Side OUT:</b> "+esc(e.sideOut.length ? e.sideOut.join(", ") : "nessuna.")+"</p>";
+  return e;
+}
+function coach(){ showEval("🤖 "); }
+function choose(choice){
+  var e = showEval("");
+  stats.hands++;
+  if(choice === e.decision){ stats.right++; el("verdict").innerHTML = "✅ Scelta corretta: " + el("verdict").innerHTML; }
+  else { stats.wrong++; el("verdict").innerHTML = "❌ Scelta discutibile: " + el("verdict").innerHTML; }
+  hist.unshift({date:new Date().toLocaleString("it-IT"), matchup:el("matchup").value, choice:choice, decision:e.decision, score:e.score, hand:currentHand.slice()});
+  hist = hist.slice(0,30);
+  localStorage.setItem("rift_stats_stable", JSON.stringify(stats));
+  localStorage.setItem("rift_history_stable", JSON.stringify(hist));
+  updateStats(); renderHistory();
+}
+function updateStats(){
+  el("stHands").textContent = stats.hands;
+  el("stRight").textContent = stats.right;
+  el("stWrong").textContent = stats.wrong;
+  el("stAcc").textContent = stats.hands ? Math.round(stats.right/stats.hands*100)+"%" : "0%";
+}
+function resetAll(){
+  if(!confirm("Vuoi resettare statistiche e storico?")) return;
+  stats={hands:0,right:0,wrong:0}; hist=[];
+  localStorage.setItem("rift_stats_stable", JSON.stringify(stats));
+  localStorage.setItem("rift_history_stable", JSON.stringify(hist));
+  updateStats(); renderHistory();
+}
+function saveDeck(){ localStorage.setItem("rift_deck_stable", el("deckText").value); alert("Lista salvata."); }
+function restoreDeck(){ el("deckText").value = DEFAULT_DECK; localStorage.setItem("rift_deck_stable", DEFAULT_DECK); }
+function saveSide(){ localStorage.setItem("rift_side_stable", el("sideText").value); alert("Sideboard salvata."); }
+function showTab(id){
+  ["guideTab","deckTab","sideTab","historyTab"].forEach(function(x){el(x).classList.add("hidden");});
+  el(id).classList.remove("hidden");
+  if(id==="guideTab") renderGuide();
+  if(id==="historyTab") renderHistory();
+}
+function badges(arr){ return arr.map(function(x){return '<span class="badge">'+esc(x)+'</span>';}).join(""); }
+function renderGuide(){
+  var rows = "";
+  Object.keys(MATCHUPS).forEach(function(name){
+    var m = MATCHUPS[name];
+    rows += "<tr><td><b>"+esc(name)+"</b><br><span class='small'>"+esc(m.plan)+"</span></td><td>"+badges(m.seek)+"</td><td>"+badges(m.avoid)+"</td><td>"+(badges(m.sideIn)||"-")+"</td><td>"+(badges(m.sideOut)||"-")+"</td></tr>";
+  });
+  el("guideTab").innerHTML = "<h2>Guida matchup</h2><table><tr><th>Matchup</th><th>Cerca</th><th>Evita</th><th>Side IN</th><th>Side OUT</th></tr>"+rows+"</table>";
+}
+function renderHistory(){
+  if(!hist.length){ el("history").innerHTML = '<p class="small">Ancora nessuna mano salvata.</p>'; return; }
+  var rows = "";
+  hist.forEach(function(h){
+    rows += "<tr><td>"+esc(h.date)+"</td><td>"+esc(h.matchup)+"</td><td>"+esc(h.hand.join(", "))+"</td><td>"+esc(h.choice)+"</td><td>"+esc(h.decision)+" ("+h.score+")</td></tr>";
+  });
+  el("history").innerHTML = "<table><tr><th>Data</th><th>Matchup</th><th>Mano</th><th>Scelta</th><th>Coach</th></tr>"+rows+"</table>";
+}
+function init(){
+  el("deckText").value = localStorage.getItem("rift_deck_stable") || DEFAULT_DECK;
+  el("sideText").value = localStorage.getItem("rift_side_stable") || DEFAULT_SIDE;
+  Object.keys(MATCHUPS).forEach(function(m){ el("matchup").add(new Option(m,m)); });
+  el("generateBtn").addEventListener("click", generateHand);
+  el("showDeckBtn").addEventListener("click", function(){showTab("deckTab");});
+  el("showSideBtn").addEventListener("click", function(){showTab("sideTab");});
+  el("guideTabBtn").addEventListener("click", function(){showTab("guideTab");});
+  el("deckTabBtn").addEventListener("click", function(){showTab("deckTab");});
+  el("sideTabBtn").addEventListener("click", function(){showTab("sideTab");});
+  el("historyTabBtn").addEventListener("click", function(){showTab("historyTab");});
+  el("clearMullBtn").addEventListener("click", clearMulliganSelection);
+  el("mulliganBtn").addEventListener("click", performMulligan);
+  el("keepBtn").addEventListener("click", function(){choose("keep");});
+  el("mullBtn").addEventListener("click", function(){choose("mulligan");});
+  el("coachBtn").addEventListener("click", coach);
+  el("resetBtn").addEventListener("click", resetAll);
+  el("saveDeckBtn").addEventListener("click", saveDeck);
+  el("restoreDeckBtn").addEventListener("click", restoreDeck);
+  el("saveSideBtn").addEventListener("click", saveSide);
+  updateStats(); renderGuide(); renderHistory(); updateMulliganInfo();
+}
+document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>
