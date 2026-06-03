@@ -24,6 +24,8 @@ button.secondary{background:#26314f}button.good{background:var(--good)}button.ba
 .hand{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .card{min-height:112px;padding:12px;border-radius:15px;border:1px solid var(--border);background:linear-gradient(180deg,#212a49,#111827)}
 .card.selected{outline:3px solid var(--warn);border-color:var(--warn)}
+.card.correct{outline:3px solid var(--good);border-color:var(--good)}
+.card.missed{outline:3px solid var(--bad);border-color:var(--bad)}
 .card b{display:block;margin-bottom:8px}
 .tag{display:inline-block;color:#d6def4;border:1px solid var(--border);border-radius:999px;padding:3px 8px;font-size:12px}
 .checkline{margin-top:10px;display:flex;align-items:center;gap:8px;color:#fff;font-weight:800}
@@ -39,7 +41,7 @@ table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--bo
 <body>
 <div class="wrap">
 <header>
-<div><h1>Riftbound Mulligan Coach</h1><p class="small">Irelia — mulligan massimo 2 carte con checkbox.</p></div>
+<div><h1>Riftbound Mulligan Coach</h1><p class="small">Irelia — quiz sul mulligan: scegli quali carte togliere, massimo 2.</p></div>
 <button class="secondary" id="resetBtn">Reset</button>
 </header>
 
@@ -52,7 +54,7 @@ table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--bo
 </div>
 <div class="row" style="margin-top:10px">
 <div><label>Dimensione mano</label><select id="handSize"><option>4</option><option selected>5</option><option>6</option><option>7</option></select></div>
-<div><label>Modalità</label><select id="mode"><option value="quiz">Quiz</option><option value="coach">Coach subito</option></select></div>
+<div><label>Modalità</label><select id="mode"><option value="quiz">Quiz carte da togliere</option><option value="coach">Coach subito</option></select></div>
 </div>
 <div class="buttons">
 <button id="generateBtn">Genera mano</button>
@@ -64,8 +66,8 @@ table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--bo
 <section class="panel">
 <h2>Statistiche</h2>
 <div class="stat">
-<div><span class="small">Mani</span><br><b id="stHands">0</b></div>
-<div><span class="small">Corrette</span><br><b id="stRight">0</b></div>
+<div><span class="small">Quiz</span><br><b id="stHands">0</b></div>
+<div><span class="small">Corretti</span><br><b id="stRight">0</b></div>
 <div><span class="small">Errori</span><br><b id="stWrong">0</b></div>
 <div><span class="small">Acc.</span><br><b id="stAcc">0%</b></div>
 </div>
@@ -76,19 +78,20 @@ table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--bo
 <div id="hand" class="hand"><p class="small">Premi “Genera mano”.</p></div>
 
 <div class="panel" style="margin-top:14px;background:#0d1322">
-<h2>Mulligan reale</h2>
-<p class="small">Spunta massimo 2 carte da rimulligare. Le altre restano.</p>
+<h2>Quiz mulligan</h2>
+<p class="small">Spunta massimo 2 carte che secondo te vanno rimulligate. Quando premi “Rimulliga selezionate”, quella diventa la tua risposta al quiz.</p>
 <p class="small" id="mulliganInfo">Carte selezionate: 0/2</p>
 <div class="buttons">
 <button class="secondary" id="clearMullBtn">Deseleziona</button>
 <button class="warn" id="mulliganBtn">Rimulliga selezionate</button>
+<button class="secondary" id="showAnswerBtn">Mostra risposta coach</button>
 </div>
 </div>
 
 <div class="buttons">
-<button class="good" id="keepBtn">KEEP</button>
-<button class="bad" id="mullBtn">MULLIGAN</button>
-<button class="warn" id="coachBtn">Consiglio app</button>
+<button class="good" id="keepBtn">KEEP generico</button>
+<button class="bad" id="mullBtn">MULLIGAN generico</button>
+<button class="warn" id="coachBtn">Valuta mano</button>
 </div>
 </section>
 
@@ -117,7 +120,7 @@ table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--bo
 <div class="buttons"><button id="saveSideBtn">Salva sideboard</button></div>
 </div>
 <div id="historyTab" class="hidden">
-<h2>Storico mani</h2>
+<h2>Storico quiz</h2>
 <div id="history"></div>
 </div>
 </section>
@@ -150,11 +153,13 @@ var currentHand = [];
 var remainingDeck = [];
 var selectedMulligan = [];
 var hasMulliganed = false;
-var stats = JSON.parse(localStorage.getItem("rift_stats_stable") || '{"hands":0,"right":0,"wrong":0}');
-var hist = JSON.parse(localStorage.getItem("rift_history_stable") || "[]");
+var revealedAnswer = null;
+var stats = JSON.parse(localStorage.getItem("rift_stats_cardquiz") || '{"hands":0,"right":0,"wrong":0}');
+var hist = JSON.parse(localStorage.getItem("rift_history_cardquiz") || "[]");
 
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];}); }
+function sameSet(a,b){ if(a.length!==b.length)return false; var x=a.slice().sort().join("|"); var y=b.slice().sort().join("|"); return x===y; }
 
 function parseDeck(text){
   var deck = [];
@@ -179,17 +184,22 @@ function generateHand(){
   }
   selectedMulligan = [];
   hasMulliganed = false;
+  revealedAnswer = null;
   renderHand();
   el("result").classList.add("hidden");
-  if(el("mode").value === "coach") coach();
+  if(el("mode").value === "coach") showCoachAnswer(false);
 }
 
-function renderHand(){
+function renderHand(highlight){
+  highlight = highlight || {};
   var html = "";
   for(var i=0;i<currentHand.length;i++){
     var c = currentHand[i];
     var checked = selectedMulligan.indexOf(i) >= 0;
-    html += '<div class="card '+(checked?'selected':'')+'">';
+    var cls = checked ? "selected" : "";
+    if(highlight.correct && highlight.correct.indexOf(i)>=0) cls += " correct";
+    if(highlight.missed && highlight.missed.indexOf(i)>=0) cls += " missed";
+    html += '<div class="card '+cls+'">';
     html += '<b>'+esc(c)+'</b><span class="tag">'+esc(typeOf(c))+'</span>';
     html += '<label class="checkline"><input type="checkbox" class="mullCheck" data-index="'+i+'" '+(checked?'checked':'')+' '+(hasMulliganed?'disabled':'')+'> Mulliga questa</label>';
     html += '</div>';
@@ -218,6 +228,57 @@ function renderHand(){
 
 function updateMulliganInfo(){ el("mulliganInfo").textContent = "Carte selezionate: " + selectedMulligan.length + "/2"; }
 
+function cardBadness(card, hand, matchupName){
+  var m = MATCHUPS[matchupName];
+  var early = ["Scuttle Crab","Tideturner","Stellacorn Herder"];
+  var interaction = ["Defy","Discipline","Charm","Not So Fast","Gust","Star-Crossed"];
+  var tempo = ["Boots of Swiftness","Defiant Dance","Ride the Wind"];
+  var value = ["Stacked Deck","Fizz, Trickster","Irelia, Fervent","Irelia, Blade Dancer"];
+  var bad = 0;
+  if(m.avoid.indexOf(card)>=0) bad += 35;
+  if(m.seek.indexOf(card)>=0) bad -= 30;
+  if(early.indexOf(card)>=0) bad -= 22;
+  if(interaction.indexOf(card)>=0) bad -= 10;
+  if(tempo.indexOf(card)>=0) bad -= 12;
+  if(value.indexOf(card)>=0) bad -= 5;
+
+  var earlyCount = hand.filter(function(c){return early.indexOf(c)>=0;}).length;
+  var interactionCount = hand.filter(function(c){return interaction.indexOf(c)>=0;}).length;
+  var gaCount = hand.filter(function(c){return c==="Guardian Angel";}).length;
+
+  if(card==="Guardian Angel" && gaCount>=2) bad += 45;
+  if(card==="Stacked Deck" && matchupName.indexOf("Aggro")>=0) bad += 35;
+  if(card==="En Garde" && matchupName.indexOf("Aggro")>=0) bad += 30;
+  if(card==="Ride the Wind" && matchupName.indexOf("Aggro")>=0) bad += 24;
+  if(card==="Charm" && matchupName.indexOf("Control")>=0) bad += 26;
+  if(card==="Not So Fast" && matchupName.indexOf("Control")>=0) bad += 22;
+
+  if(earlyCount===0 && early.indexOf(card)<0) bad += 15;
+  if(interactionCount===0 && earlyCount===0 && interaction.indexOf(card)<0) bad += 10;
+
+  if(card==="Boots of Swiftness" && earlyCount>=1) bad -= 20;
+  if(card==="Tideturner" && hand.indexOf("Defiant Dance")>=0) bad -= 14;
+  if(card==="Defiant Dance" && hand.indexOf("Tideturner")>=0) bad -= 14;
+
+  return bad;
+}
+
+function recommendedMulliganIndices(){
+  if(!currentHand.length) return [];
+  var matchupName = el("matchup").value;
+  var scored = currentHand.map(function(card, index){
+    return {index:index, card:card, badness:cardBadness(card, currentHand, matchupName)};
+  });
+  scored.sort(function(a,b){return b.badness - a.badness;});
+  var rec = scored.filter(function(x){return x.badness >= 18;}).slice(0,2).map(function(x){return x.index;});
+  return rec;
+}
+
+function recommendedNames(indices){
+  if(!indices.length) return "nessuna carta: il coach terrebbe tutta la mano.";
+  return indices.map(function(i){return currentHand[i];}).join(", ");
+}
+
 function clearMulliganSelection(){
   if(hasMulliganed) return;
   selectedMulligan = [];
@@ -227,18 +288,43 @@ function clearMulliganSelection(){
 function performMulligan(){
   if(!currentHand.length){ alert("Prima genera una mano."); return; }
   if(hasMulliganed){ alert("Hai già fatto il mulligan per questa mano."); return; }
-  if(selectedMulligan.length === 0){ alert("Seleziona 1 o 2 carte da rimulligare."); return; }
-  for(var a=0;a<selectedMulligan.length;a++){
-    var i = selectedMulligan[a];
-    if(remainingDeck.length === 0) continue;
+
+  var beforeHand = currentHand.slice();
+  var answer = recommendedMulliganIndices();
+  revealedAnswer = answer.slice();
+  var chosen = selectedMulligan.slice().sort(function(a,b){return a-b;});
+  var correct = sameSet(chosen, answer.slice().sort(function(a,b){return a-b;}));
+
+  stats.hands++;
+  if(correct) stats.right++; else stats.wrong++;
+
+  var chosenNames = chosen.length ? chosen.map(function(i){return beforeHand[i];}).join(", ") : "nessuna carta";
+  var answerNames = answer.length ? answer.map(function(i){return beforeHand[i];}).join(", ") : "nessuna carta";
+  var missed = answer.filter(function(i){return chosen.indexOf(i)<0;});
+
+  el("result").classList.remove("hidden");
+  el("verdict").innerHTML = correct ? '<span class="keep">✅ Quiz corretto</span>' : '<span class="mull">❌ Quiz sbagliato</span>';
+  el("score").textContent = correct ? "100/100" : "0/100";
+  el("reason").innerHTML =
+    "<p><b>La tua scelta:</b> "+esc(chosenNames)+"</p>"+
+    "<p><b>Scelta consigliata:</b> "+esc(answerNames)+"</p>"+
+    "<p>"+esc(MATCHUPS[el("matchup").value].plan)+"</p>";
+
+  hist.unshift({date:new Date().toLocaleString("it-IT"), matchup:el("matchup").value, chosen:chosenNames, answer:answerNames, correct:correct, hand:beforeHand.slice()});
+  hist = hist.slice(0,30);
+  localStorage.setItem("rift_stats_cardquiz", JSON.stringify(stats));
+  localStorage.setItem("rift_history_cardquiz", JSON.stringify(hist));
+  updateStats();
+  renderHistory();
+
+  selectedMulligan.forEach(function(i){
+    if(remainingDeck.length === 0) return;
     var idx = Math.floor(Math.random()*remainingDeck.length);
     currentHand[i] = remainingDeck.splice(idx,1)[0];
-  }
+  });
   hasMulliganed = true;
   selectedMulligan = [];
-  renderHand();
-  el("result").classList.add("hidden");
-  alert("Mulligan effettuato.");
+  renderHand({correct:answer, missed:missed});
 }
 
 function evaluate(){
@@ -271,27 +357,31 @@ function evaluate(){
 
 function showEval(prefix){
   var e = evaluate();
+  var rec = recommendedMulliganIndices();
   el("result").classList.remove("hidden");
-  el("verdict").innerHTML = (prefix||"") + (e.decision==="keep" ? '<span class="keep">KEEP consigliato</span>' : '<span class="mull">MULLIGAN consigliato</span>');
+  el("verdict").innerHTML = (prefix||"") + (e.decision==="keep" ? '<span class="keep">KEEP generico consigliato</span>' : '<span class="mull">MULLIGAN generico consigliato</span>');
   el("score").textContent = e.score + "/100";
   el("reason").innerHTML = "<p>"+esc(e.plan)+"</p>"
+    + "<p><b>Carte che il coach toglierebbe nel quiz:</b> "+esc(recommendedNames(rec))+"</p>"
     + "<p><b>Carte prioritarie trovate:</b> "+esc(e.hits.length ? e.hits.join(", ") : "nessuna.")+"</p>"
     + "<p><b>Carte penalizzate:</b> "+esc(e.misses.length ? e.misses.join(", ") : "nessuna.")+"</p>"
-    + "<p><b>Note:</b> "+esc(e.notes.length ? e.notes.join(" ") : "Nessuna nota critica.")+"</p>"
-    + "<p><b>Side IN:</b> "+esc(e.sideIn.length ? e.sideIn.join(", ") : "nessuna.")+"<br><b>Side OUT:</b> "+esc(e.sideOut.length ? e.sideOut.join(", ") : "nessuna.")+"</p>";
+    + "<p><b>Note:</b> "+esc(e.notes.length ? e.notes.join(" ") : "Nessuna nota critica.")+"</p>";
   return e;
 }
 function coach(){ showEval("🤖 "); }
+function showCoachAnswer(){
+  if(!currentHand.length){ alert("Prima genera una mano."); return; }
+  var rec = recommendedMulliganIndices();
+  el("result").classList.remove("hidden");
+  el("verdict").innerHTML = '<span class="keep">Risposta coach</span>';
+  el("score").textContent = "";
+  el("reason").innerHTML = "<p><b>Carte da rimulligare:</b> "+esc(recommendedNames(rec))+"</p><p>Questa funzione mostra la risposta e quindi non conta come quiz.</p>";
+  renderHand({correct:rec});
+}
+
 function choose(choice){
   var e = showEval("");
-  stats.hands++;
-  if(choice === e.decision){ stats.right++; el("verdict").innerHTML = "✅ Scelta corretta: " + el("verdict").innerHTML; }
-  else { stats.wrong++; el("verdict").innerHTML = "❌ Scelta discutibile: " + el("verdict").innerHTML; }
-  hist.unshift({date:new Date().toLocaleString("it-IT"), matchup:el("matchup").value, choice:choice, decision:e.decision, score:e.score, hand:currentHand.slice()});
-  hist = hist.slice(0,30);
-  localStorage.setItem("rift_stats_stable", JSON.stringify(stats));
-  localStorage.setItem("rift_history_stable", JSON.stringify(hist));
-  updateStats(); renderHistory();
+  el("verdict").innerHTML = "Valutazione generica: " + el("verdict").innerHTML;
 }
 function updateStats(){
   el("stHands").textContent = stats.hands;
@@ -302,13 +392,13 @@ function updateStats(){
 function resetAll(){
   if(!confirm("Vuoi resettare statistiche e storico?")) return;
   stats={hands:0,right:0,wrong:0}; hist=[];
-  localStorage.setItem("rift_stats_stable", JSON.stringify(stats));
-  localStorage.setItem("rift_history_stable", JSON.stringify(hist));
+  localStorage.setItem("rift_stats_cardquiz", JSON.stringify(stats));
+  localStorage.setItem("rift_history_cardquiz", JSON.stringify(hist));
   updateStats(); renderHistory();
 }
-function saveDeck(){ localStorage.setItem("rift_deck_stable", el("deckText").value); alert("Lista salvata."); }
-function restoreDeck(){ el("deckText").value = DEFAULT_DECK; localStorage.setItem("rift_deck_stable", DEFAULT_DECK); }
-function saveSide(){ localStorage.setItem("rift_side_stable", el("sideText").value); alert("Sideboard salvata."); }
+function saveDeck(){ localStorage.setItem("rift_deck_cardquiz", el("deckText").value); alert("Lista salvata."); }
+function restoreDeck(){ el("deckText").value = DEFAULT_DECK; localStorage.setItem("rift_deck_cardquiz", DEFAULT_DECK); }
+function saveSide(){ localStorage.setItem("rift_side_cardquiz", el("sideText").value); alert("Sideboard salvata."); }
 function showTab(id){
   ["guideTab","deckTab","sideTab","historyTab"].forEach(function(x){el(x).classList.add("hidden");});
   el(id).classList.remove("hidden");
@@ -325,16 +415,16 @@ function renderGuide(){
   el("guideTab").innerHTML = "<h2>Guida matchup</h2><table><tr><th>Matchup</th><th>Cerca</th><th>Evita</th><th>Side IN</th><th>Side OUT</th></tr>"+rows+"</table>";
 }
 function renderHistory(){
-  if(!hist.length){ el("history").innerHTML = '<p class="small">Ancora nessuna mano salvata.</p>'; return; }
+  if(!hist.length){ el("history").innerHTML = '<p class="small">Ancora nessun quiz salvato.</p>'; return; }
   var rows = "";
   hist.forEach(function(h){
-    rows += "<tr><td>"+esc(h.date)+"</td><td>"+esc(h.matchup)+"</td><td>"+esc(h.hand.join(", "))+"</td><td>"+esc(h.choice)+"</td><td>"+esc(h.decision)+" ("+h.score+")</td></tr>";
+    rows += "<tr><td>"+esc(h.date)+"</td><td>"+esc(h.matchup)+"</td><td>"+esc(h.hand.join(", "))+"</td><td>"+esc(h.chosen)+"</td><td>"+esc(h.answer)+"</td><td>"+(h.correct?"✅":"❌")+"</td></tr>";
   });
-  el("history").innerHTML = "<table><tr><th>Data</th><th>Matchup</th><th>Mano</th><th>Scelta</th><th>Coach</th></tr>"+rows+"</table>";
+  el("history").innerHTML = "<table><tr><th>Data</th><th>Matchup</th><th>Mano</th><th>Tua scelta</th><th>Coach</th><th>Esito</th></tr>"+rows+"</table>";
 }
 function init(){
-  el("deckText").value = localStorage.getItem("rift_deck_stable") || DEFAULT_DECK;
-  el("sideText").value = localStorage.getItem("rift_side_stable") || DEFAULT_SIDE;
+  el("deckText").value = localStorage.getItem("rift_deck_cardquiz") || DEFAULT_DECK;
+  el("sideText").value = localStorage.getItem("rift_side_cardquiz") || DEFAULT_SIDE;
   Object.keys(MATCHUPS).forEach(function(m){ el("matchup").add(new Option(m,m)); });
   el("generateBtn").addEventListener("click", generateHand);
   el("showDeckBtn").addEventListener("click", function(){showTab("deckTab");});
@@ -345,6 +435,7 @@ function init(){
   el("historyTabBtn").addEventListener("click", function(){showTab("historyTab");});
   el("clearMullBtn").addEventListener("click", clearMulliganSelection);
   el("mulliganBtn").addEventListener("click", performMulligan);
+  el("showAnswerBtn").addEventListener("click", showCoachAnswer);
   el("keepBtn").addEventListener("click", function(){choose("keep");});
   el("mullBtn").addEventListener("click", function(){choose("mulligan");});
   el("coachBtn").addEventListener("click", coach);
